@@ -15,11 +15,27 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 var basePath string
 var port string
 var token string
+
+func HasFileWithPrefixExceptExt(dir, prefix, excludeExt string) (bool, error) {
+	pattern := filepath.Join(dir, prefix)
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return false, err
+	}
+
+	for _, f := range files {
+		if !strings.HasSuffix(f, excludeExt) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 func openPath(path string) error {
 	var cmd *exec.Cmd
@@ -76,7 +92,9 @@ func main() {
 		}
 
 		cleanName := filepath.Clean(name)
-		if cleanName != name || filepath.IsAbs(name) {
+		if filepath.IsAbs(name) {
+			fmt.Printf("Base path: %s\n", cleanName)
+			fmt.Printf("Base path: %s\n", name)
 			http.Error(w, "Invalid folder/file name", http.StatusBadRequest)
 			return
 		}
@@ -94,6 +112,65 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+
+	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		glob := r.URL.Query().Get("glob")
+		givenToken := r.URL.Query().Get("token")
+		if name == "" {
+			http.Error(w, "Missing ?name= parameter", http.StatusBadRequest)
+			return
+		}
+		if token != "" && token != givenToken {
+			http.Error(w, "Invalid Token", http.StatusBadRequest)
+			return
+		}
+
+		cleanName := filepath.Clean(name)
+		if filepath.IsAbs(name) {
+			fmt.Printf("Base path: %s\n", cleanName)
+			fmt.Printf("Base path: %s\n", name)
+			http.Error(w, "Invalid folder/file name", http.StatusBadRequest)
+			return
+		}
+
+		fullPath := filepath.Join(basePath, cleanName)
+		_, err := os.Stat(fullPath)
+		if err != nil {
+			w.Header().Add("Content-Type", "image/svg+xml")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'><rect width='16' height='16' fill='red' /></svg>"))
+			return	
+		} else {
+			if(glob != "") {
+				globBase := filepath.Base(glob)
+	
+				ok, err := HasFileWithPrefixExceptExt(fullPath, globBase, ".txt")
+				if err != nil {
+				    http.Error(w, "Bad Glob", http.StatusBadRequest)
+					return
+				}
+				if ok {
+				   w.Header().Add("Content-Type", "image/svg+xml")
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'><rect width='16' height='16' fill='green' /></svg>"))
+					return
+				} else {
+				 	w.Header().Add("Content-Type", "image/svg+xml")
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'><rect width='16' height='16' fill='orange' /></svg>"))
+					return	
+				}
+				
+			} else {
+
+				w.Header().Add("Content-Type", "image/svg+xml")
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'><rect width='16' height='16' fill='green' /></svg>"))
+				return
+			}
+		}
 	})
 
 	fmt.Printf("Base path: %s\n", basePath)
