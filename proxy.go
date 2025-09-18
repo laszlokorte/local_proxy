@@ -1,0 +1,106 @@
+package main
+
+// Proxy for opening local files in the explorer/finder via link from the browser
+// run as:
+// go run .\proxy.go -base C:\Users\Sophie\SomeFolder -token foo -port 1234
+// and put a link onto a website:
+// http://localhost:1234/open?name=subDir&token=foo
+// when the link is clicked (fetched by the browser) the subDir is open in the explorer locally
+
+import (
+	"flag"
+	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+)
+
+var basePath string
+var port string
+var token string
+
+func openPath(path string) error {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "windows":
+//		cmd = exec.Command("explorer", "/c", "start", "", path)
+		cmd = exec.Command("explorer", path)
+	case "darwin":
+		cmd = exec.Command("open", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+
+	return cmd.Start()
+}
+
+func main() {
+	flag.StringVar(&basePath, "base", ".", "Base directory for allowed paths (required)")
+	flag.StringVar(&port, "port", "4455", "Port to listen on")
+	flag.StringVar(&token, "token", "", "Secret token to check for (&token=...) in request")
+	flag.Parse()
+
+	abs, err := filepath.Abs(basePath)
+	if err != nil {
+	    fmt.Println("Error resolving base path:", err)
+	    os.Exit(1)
+	}
+	basePath = abs
+	info, err := os.Stat(basePath)
+	if os.IsNotExist(err) {
+	    fmt.Println("Error: base path does not exist:", basePath)
+	    os.Exit(1)
+	}
+	if err != nil {
+	    fmt.Println("Error checking base path:", err)
+	    os.Exit(1)
+	}
+	if !info.IsDir() {
+	    fmt.Println("Error: base path is not a directory:", basePath)
+	    os.Exit(1)
+	}
+
+	http.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		givenToken := r.URL.Query().Get("token")
+		if name == "" {
+			http.Error(w, "Missing ?name= parameter", http.StatusBadRequest)
+			return
+		}
+		if token != "" && token != givenToken {
+			http.Error(w, "Invalid Token", http.StatusBadRequest)
+			return
+		}
+
+		cleanName := filepath.Clean(name)
+		if cleanName != name || filepath.IsAbs(name) {
+			http.Error(w, "Invalid folder/file name", http.StatusBadRequest)
+			return
+		}
+
+		fullPath := filepath.Join(basePath, cleanName)
+		info, err := os.Stat(fullPath)
+
+		if err != nil || !info.IsDir() {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return	
+		}
+
+		if err := openPath(fullPath); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to open: %v", err), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	fmt.Printf("Base path: %s\n", basePath)
+	fmt.Printf("Listening on http://localhost:%s\n", port)
+	fmt.Printf("Example:\n http://localhost:%s/open?name=.&token=%s\n", port, token)
+	if err := http.ListenAndServe("localhost:"+port, nil); err != nil {
+		fmt.Println("Server error:", err)
+		os.Exit(1)
+	}
+}
