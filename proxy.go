@@ -21,6 +21,7 @@ import (
 var basePath string
 var port string
 var token string
+var iconSize = 24
 
 func HasFileWithPrefixExceptExt(dir, prefix, excludeExt string) (bool, error) {
 	pattern := filepath.Join(dir, prefix)
@@ -134,7 +135,7 @@ func main() {
 			http.Error(w, "Invalid folder/file name", http.StatusBadRequest)
 			return
 		}
-		svgTpl := "<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg' font-family='monospace'><rect width='16' height='16' fill='%s' /><text x='1' y='12'>%s</text></svg>"
+		svgTpl := fmt.Sprintf("<svg viewBox='0 0 %d %d' xmlns='http://www.w3.org/2000/svg' font-family='monospace'><rect width='%d' height='%d' fill='%%s' /><text x='%d' y='%d' text-anchor='middle'>%%s</text></svg>", iconSize, iconSize, iconSize, iconSize, 2*iconSize/3, 2*iconSize/3)
 		fullPath := filepath.Join(basePath, cleanName)
 		_, err := os.Stat(fullPath)
 		if err != nil {
@@ -185,9 +186,9 @@ func main() {
 		}
 		w.Header().Add("Content-Type", "text/css")
 		w.WriteHeader(http.StatusOK)
-		cssTpl := ".%s { display: initial !important; }"
+		cssTpl := ".%s { display: initial !important; } .%s-loading { display: none; }"
 
-		fmt.Fprintf(w, cssTpl, class)
+		fmt.Fprintf(w, cssTpl, class, class)
 	})
 
 	fmt.Printf("Base path: %s\n", basePath)
