@@ -42,7 +42,7 @@ func openPath(path string) error {
 
 	switch runtime.GOOS {
 	case "windows":
-//		cmd = exec.Command("explorer", "/c", "start", "", path)
+		//		cmd = exec.Command("explorer", "/c", "start", "", path)
 		cmd = exec.Command("explorer", path)
 	case "darwin":
 		cmd = exec.Command("open", path)
@@ -61,22 +61,22 @@ func main() {
 
 	abs, err := filepath.Abs(basePath)
 	if err != nil {
-	    fmt.Println("Error resolving base path:", err)
-	    os.Exit(1)
+		fmt.Println("Error resolving base path:", err)
+		os.Exit(1)
 	}
 	basePath = abs
 	info, err := os.Stat(basePath)
 	if os.IsNotExist(err) {
-	    fmt.Println("Error: base path does not exist:", basePath)
-	    os.Exit(1)
+		fmt.Println("Error: base path does not exist:", basePath)
+		os.Exit(1)
 	}
 	if err != nil {
-	    fmt.Println("Error checking base path:", err)
-	    os.Exit(1)
+		fmt.Println("Error checking base path:", err)
+		os.Exit(1)
 	}
 	if !info.IsDir() {
-	    fmt.Println("Error: base path is not a directory:", basePath)
-	    os.Exit(1)
+		fmt.Println("Error: base path is not a directory:", basePath)
+		os.Exit(1)
 	}
 
 	http.HandleFunc("/open", func(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +104,7 @@ func main() {
 
 		if err != nil || !info.IsDir() {
 			http.Error(w, "Not Found", http.StatusNotFound)
-			return	
+			return
 		}
 
 		if err := openPath(fullPath); err != nil {
@@ -134,35 +134,35 @@ func main() {
 			http.Error(w, "Invalid folder/file name", http.StatusBadRequest)
 			return
 		}
-
+		svgTpl := "<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg' font-family='monospace'><rect width='16' height='16' fill='%s' /><text x='1' y='12'>%s</text></svg>"
 		fullPath := filepath.Join(basePath, cleanName)
 		_, err := os.Stat(fullPath)
 		if err != nil {
 			w.Header().Add("Content-Type", "image/svg+xml")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'><rect width='16' height='16' fill='red' /></svg>"))
-			return	
+			fmt.Fprintf(w, svgTpl, "red", glob)
+			return
 		} else {
-			if(glob != "") {
+			if glob != "" {
 				globBase := filepath.Base(glob)
-	
+
 				ok, err := HasFileWithPrefixExceptExt(fullPath, globBase, ".txt")
 				if err != nil {
-				    http.Error(w, "Bad Glob", http.StatusBadRequest)
+					http.Error(w, "Bad Glob", http.StatusBadRequest)
 					return
 				}
 				if ok {
-				   w.Header().Add("Content-Type", "image/svg+xml")
+					w.Header().Add("Content-Type", "image/svg+xml")
 					w.WriteHeader(http.StatusOK)
-					w.Write([]byte("<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'><rect width='16' height='16' fill='green' /></svg>"))
+					fmt.Fprintf(w, svgTpl, "green", glob)
 					return
 				} else {
-				 	w.Header().Add("Content-Type", "image/svg+xml")
+					w.Header().Add("Content-Type", "image/svg+xml")
 					w.WriteHeader(http.StatusOK)
-					w.Write([]byte("<svg viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'><rect width='16' height='16' fill='orange' /></svg>"))
-					return	
+					fmt.Fprintf(w, svgTpl, "orange", glob)
+					return
 				}
-				
+
 			} else {
 
 				w.Header().Add("Content-Type", "image/svg+xml")
@@ -171,6 +171,23 @@ func main() {
 				return
 			}
 		}
+	})
+	http.HandleFunc("/style", func(w http.ResponseWriter, r *http.Request) {
+		class := r.URL.Query().Get("class")
+		givenToken := r.URL.Query().Get("token")
+		if class == "" {
+			http.Error(w, "Missing ?class= parameter", http.StatusBadRequest)
+			return
+		}
+		if token != "" && token != givenToken {
+			http.Error(w, "Invalid Token", http.StatusBadRequest)
+			return
+		}
+		w.Header().Add("Content-Type", "text/css")
+		w.WriteHeader(http.StatusOK)
+		cssTpl := ".%s { display: initial !important; }"
+
+		fmt.Fprintf(w, cssTpl, class)
 	})
 
 	fmt.Printf("Base path: %s\n", basePath)
